@@ -1,0 +1,86 @@
+`ifndef WATCHDOG_COVERAGE_SV
+`define WATCHDOG_COVERAGE_SV
+
+class watchdog_coverage extends watchdog_subscriber;
+
+  `uvm_component_utils(watchdog_coverage)
+  //covergroup definition below
+  //T1 overall control
+  //T1.1 interrupt enable and disable(0->1 , 1->0)
+  //T1.2 reset enable and disable (0->1 , 1->0)
+  covergroup wdg_t1_overall_control_cg with function sample(bit [31:0] val, string field);
+    option.name = "T1 watchdog overall control";
+    INTEN : coverpoint val iff(field == "INTEN"){
+      bins stat_en    = {1'b0};
+      bins stat_dis   = {1'b1};
+      bins to_enable  = (1'b0 => 1'b1);
+      bins to_disable = (1'b1 => 1'b0);
+    }
+    RESEN : coverpoint val iff(field == "RESEN"){
+      bins stat_en    = {1'b0};
+      bins stat_dis   = {1'b1};
+      bins to_enable  = (1'b0 => 1'b1);
+      bins to_disable = (1'b1 => 1'b0);
+    }
+  endgroup
+
+  //T2 Watchdog load and reload 
+  //T2.1 Intinial load (coutn 0 -> load val)
+  //T2.2 Relaod val (laod val 1 -> laod val 2)
+  //T2.3 Load val range (min & max & otehers)
+  covergroup wdg_t2_load_reload_cg with function sample(bit [31:0] val);
+    option.name = "wdg T2 load & reload";
+   INITLOAD : coverpoint val{
+     bins initload = (0 => [1:32'hFFFFFFFF]);
+   } 
+   RELOAD : coverpoint val{
+     bins reload = ([1:32'hFFFFFFFF] => [1:32'hFFFFFFFF]); 
+   }
+    LOADRANGE : coverpoint val{
+      bins min = {32'h1};
+      bins max = {32'hFFFFFFFF};
+      bins others = {[32'h2 : 32'hFFFFFFE]};
+    }
+  endgroup
+
+	function new(string name="watchdog_coverage", uvm_component parent);
+		super.new(name, parent);
+    wdg_t1_overall_control_cg = new();
+    wdg_t2_load_reload_cg = new();
+	endfunction
+	
+	function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+
+  endfunction
+
+  task listening_events();
+    uvm_object tmp;
+    //tmp =uvm_object::type_id::create("tmp"); 
+ //   WDOGLOAD_reg r;
+ //   r = WDOGLOAD_reg::type_id::create("r", this);
+
+    uvm_reg r;
+   // r = new();
+    fork 
+      forever begin
+        wait(cfg.enable_cov);
+        wdg_regacc_e.wait_trigger_data(tmp);
+        void'($cast(r,tmp));
+        #1ps;
+        if (r.get_name() == "WDOGCONTROL") begin
+          wdg_t1_overall_control_cg.sample(rgm.WDOGCONTROL.INTEN.get(),"INTEN");
+          wdg_t1_overall_control_cg.sample(rgm.WDOGCONTROL.RESEN.get(),"RESEN");
+        end
+        if (r.get_name() == "WDOGLOAD") begin
+          wdg_t1_overall_control_cg.sample(rgm.WDOGCONTROL.RESEN.get(),"RESEN");
+          wdg_t2_load_reload_cg.sample(rgm.WDOGLOAD.LOADVAL.get());
+        end
+      end  
+    join_none
+  endtask
+	
+endclass
+		
+
+`endif
